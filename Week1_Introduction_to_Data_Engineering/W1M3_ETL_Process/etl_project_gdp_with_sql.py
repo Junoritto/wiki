@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 import json
+import sqlite3
 from tabulate import tabulate
 from datetime import datetime
 import os
@@ -11,8 +12,8 @@ import os
 TARGET_URL = 'https://en.wikipedia.org/wiki/List_of_countries_by_GDP_(nominal)'
 REGION_MAPPING_FILE = 'data/country_region_table.json'
 RAW_DATA_FILE = 'results/Countries_by_GDP.json'
-PROCESSED_DATA_FILE = 'results/Countries_by_GDP_Processed.json'
-LOG_FILE = 'log/etl_project_log.txt'
+DB_FILE = 'sqliteDB/World_Economies.db' # SQLite DB 파일 경로
+LOG_FILE = 'log/etl_project_with_sql_log.txt'
 
 # 로그 기록 함수
 def log_message(message):
@@ -71,6 +72,23 @@ class GDP_ETL:
         else:
             log_message(f"웹 페이지 요청 실패 - 상태 코드 {response.status_code}")
         return BeautifulSoup(response.content, 'html.parser')
+    
+    # DB 연결 및 쿼리 실행 (결과 반환 X) (삽입, 수정, 삭제 용도)
+    def execute_query(self, query, params=None):
+        with sqlite3.connect(DB_FILE) as conn:
+            cur = conn.cursor()
+            if params:
+                cur.execute(query, params)
+            else:
+                cur.execute(query)
+            conn.commit()
+
+    # DB 연결 및 쿼리 결과 조회 (결과 반환 O) (조회 용도)
+    def fetch_query(self, query, params=None):
+        with sqlite3.connect(DB_FILE) as conn:
+            if params:
+                return pd.read_sql(query, conn, params=params)
+            return pd.read_sql(query, conn)
 
     @log_decorator
     def extract(self):
@@ -144,49 +162,59 @@ class GDP_ETL:
     @log_decorator
     def load(self, df):
         """
-        변환된 데이터를 JSON 파일로 저장.
-        저장 후 파일 크기를 로그에 기록.
+        변환된 데이터를 sqlite3 DB에 저장.
         """
-        df.to_json(PROCESSED_DATA_FILE, orient='records', indent=4)
-        file_size = os.path.getsize(PROCESSED_DATA_FILE) / 1024  # KB 단위로 파일 크기 계산
-        log_message(f"파일 저장 완료: {PROCESSED_DATA_FILE} ({file_size:.2f} KB)")
-        return len(df)
+        # SQLite 데이터베이스 연결
+        with sqlite3.connect(DB_FILE) as conn:
+            df.to_sql('Countries_by_GDP', conn, if_exists='replace', index=False)
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM Countries_by_GDP")
+            row_count = cur.fetchone()[0]
+        log_message(f"데이터베이스 저장 완료: {row_count}개 행 저장됨")
+        return row_count
 
     @log_decorator
-    def print_gdp_over_100b(self, df):
+    def print_gdp_over_100b(self):
         """
         GDP가 100B USD 이상인 국가를 출력.
         """
-        gdp_over_100b = df[df['GDP_USD_billion'] >= 100]
-        gdp_over_100b.index = range(1, len(gdp_over_100b) + 1)
+        query = """
+        SELECT Country, GDP_USD_billion, Year
+        FROM Countries_by_GDP
+        WHERE GDP_USD_billion >= 100
+        ORDER BY GDP_USD_billion DESC;
+        """
+        df = self.fetch_query(query)
+
+        df.index = range(1, len(df) + 1)
         print("\n🌍 GDP 100B USD 이상 국가 목록:")
-        print(tabulate(gdp_over_100b, headers='keys', tablefmt='grid'))
-        log_message(f"GDP 100B 이상 국가 {len(gdp_over_100b)}개 출력됨")
-        return len(gdp_over_100b)
+        print(tabulate(df, headers='keys', tablefmt='grid'))
+        log_message(f"GDP 100B 이상 국가 {len(df)}개 출력됨")
+        return len(df)
 
     @log_decorator
-    def print_region_avg_gdp(self, df):
+    def print_region_avg_gdp(self):
         """
         지역별 상위 5개 국가의 GDP 평균을 계산하여 출력.
         """
-        top_5_per_region = (
-            df.sort_values('GDP_USD_billion', ascending=False)
-            .groupby('Region')
-            .head(5)
+        query = """
+        SELECT Region, ROUND(AVG(GDP_USD_billion),2) AS "Top 5 Avg GDP"
+        FROM (
+            SELECT Country, Region, GDP_USD_billion,
+                   ROW_NUMBER() OVER (PARTITION BY Region ORDER BY GDP_USD_billion DESC) AS rank
+            FROM Countries_by_GDP
         )
-        region_avg_gdp = (
-            top_5_per_region.groupby('Region')['GDP_USD_billion']
-            .mean()
-            .round(2)
-            .reset_index()
-            .rename(columns={'GDP_USD_billion': 'Top 5 Avg GDP'})
-            .sort_values('Top 5 Avg GDP', ascending=False)
-        )
-        region_avg_gdp.index = range(1, len(region_avg_gdp) + 1)
+        WHERE rank <= 5
+        GROUP BY Region
+        ORDER BY "Top 5 Avg GDP" DESC;
+        """
+        df = self.fetch_query(query)
+
+        df.index = range(1, len(df) + 1)
         print("\n📊 Region별 상위 5개 국가의 GDP 평균:")
-        print(tabulate(region_avg_gdp, headers='keys', tablefmt='grid'))
-        log_message(f"Region별 GDP 평균 계산 완료 (총 {len(region_avg_gdp)}개 지역)")
-        return len(region_avg_gdp)
+        print(tabulate(df, headers='keys', tablefmt='grid'))
+        log_message(f"Region별 GDP 평균 계산 완료 (총 {len(df)}개 지역)")
+        return len(df)
 
 
 def main():
@@ -195,8 +223,8 @@ def main():
     raw_df = etl.extract()
     transformed_df = etl.transform(raw_df)
     etl.load(transformed_df)
-    etl.print_gdp_over_100b(transformed_df)
-    etl.print_region_avg_gdp(transformed_df)
+    etl.print_gdp_over_100b()
+    etl.print_region_avg_gdp()
 
 
 if __name__ == '__main__':
