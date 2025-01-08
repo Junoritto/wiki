@@ -483,3 +483,6 @@
 2025-January-07-16-46-58, print_region_avg_gdp 시작
 2025-January-07-16-46-58, Region별 GDP 평균 계산 완료 (총 6개 지역)
 2025-January-07-16-46-58, print_region_avg_gdp 완료: 6
+2025-01-08 11:28:03 [EXTRACT] extract 시작
+2025-01-08 11:28:04 [EXTRACT] 파일 저장 완료: results/Countries_by_GDP.json (20.91 KB)
+2025-01-08 11:28:04 [EXTRACT] extract 완료: Success

@@ -480,6 +480,11 @@
         "Year":"2024"
     },
     {
+        "Country":"Cambodia",
+        "GDP_USD_billion":"51,159",
+        "Year":"2025"
+    },
+    {
         "Country":"Bolivia",
         "GDP_USD_billion":"48,172",
         "Year":"2024"
@@ -487,11 +492,6 @@
     {
         "Country":"Bahrain",
         "GDP_USD_billion":"47,812",
-        "Year":"2024"
-    },
-    {
-        "Country":"Cambodia",
-        "GDP_USD_billion":"47,147",
         "Year":"2024"
     },
     {

@@ -564,6 +564,12 @@
         "Region":"Africa"
     },
     {
+        "Country":"Cambodia",
+        "GDP_USD_billion":51.16,
+        "Year":"2025",
+        "Region":"Asia"
+    },
+    {
         "Country":"Bolivia",
         "GDP_USD_billion":48.17,
         "Year":"2024",
@@ -572,12 +578,6 @@
     {
         "Country":"Bahrain",
         "GDP_USD_billion":47.81,
-        "Year":"2024",
-        "Region":"Asia"
-    },
-    {
-        "Country":"Cambodia",
-        "GDP_USD_billion":47.15,
         "Year":"2024",
         "Region":"Asia"
     },
